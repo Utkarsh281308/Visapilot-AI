@@ -68,16 +68,52 @@ export default function EligibilityPage() {
 
   const progress = ((step + 1) / steps.length) * 100
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < steps.length - 1) {
       setStep((s) => s + 1)
       return
     }
-    setLoading(true)
-    setTimeout(() => {
-      toast.success("Analysis complete — here are your matches!")
+  
+    try {
+      setLoading(true)
+  
+      const response = await fetch(
+        "http://127.0.0.1:8000/eligibility/check",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            nationality: "Indian",
+            destination_country: form.destination,
+            purpose: form.purpose,
+            age: Number(form.age),
+            education_level: form.education,
+            work_experience_years: 1,
+            budget: 5000,
+          }),
+        }
+      )
+  
+      const result = await response.json()
+  
+      console.log("API Response:", result)
+  
+      localStorage.setItem(
+        "eligibilityResult",
+        JSON.stringify(result)
+      )
+  
+      toast.success("Analysis complete!")
       router.push("/recommendations")
-    }, 1600)
+  
+    } catch (error) {
+      console.error(error)
+      toast.error("Could not connect to backend")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

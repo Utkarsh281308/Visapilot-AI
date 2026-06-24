@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -16,7 +19,26 @@ import { PageShell } from "@/components/page-shell"
 import { visaRecommendations, riskColor } from "@/lib/data"
 import { cn } from "@/lib/utils"
 
+type EligibilityResult = {
+  recommended_visa: string
+  destination_country: string
+  eligibility_score: number
+  approval_probability: number
+  risk_level: string
+  summary: string
+  recommended_documents: string[]
+}
+
 export default function RecommendationsPage() {
+  const [result, setResult] = useState<EligibilityResult | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem("eligibilityResult")
+    if (stored) {
+      setResult(JSON.parse(stored))
+    }
+  }, [])
+
   const sorted = [...visaRecommendations].sort(
     (a, b) => b.matchScore - a.matchScore,
   )
@@ -32,57 +54,101 @@ export default function RecommendationsPage() {
         </Button>
       }
     >
-      {/* Top pick */}
-      <Card className="mb-8 overflow-hidden border-primary/30 bg-primary/5">
-        <CardContent className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <span className="text-4xl">{top.flag}</span>
-            <div>
-              <Badge className="mb-2 gap-1.5 bg-primary text-primary-foreground">
-                <Sparkles className="h-3.5 w-3.5" />
-                Best match for you
-              </Badge>
-              <h2 className="text-xl font-bold">
-                {top.country} — {top.visaType}
-              </h2>
-              <p className="text-sm text-muted-foreground">{top.purpose}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {top.highlights.map((h) => (
-                  <span
-                    key={h}
-                    className="flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs text-muted-foreground"
+      {result && (
+        <Card className="mb-8 overflow-hidden border-primary/30 bg-primary/5">
+          <CardContent className="p-6">
+            <Badge className="mb-3 gap-1.5 bg-primary text-primary-foreground">
+              <Sparkles className="h-3.5 w-3.5" />
+              Live backend result
+            </Badge>
+
+            <h2 className="text-2xl font-bold">
+              {result.destination_country} — {result.recommended_visa}
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              {result.summary}
+            </p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg border bg-card p-4">
+                <p className="text-sm text-muted-foreground">
+                  Eligibility Score
+                </p>
+                <p className="text-3xl font-bold text-primary">
+                  {result.eligibility_score}%
+                </p>
+                <Progress value={result.eligibility_score} className="mt-2" />
+              </div>
+
+              <div className="rounded-lg border bg-card p-4">
+                <p className="text-sm text-muted-foreground">
+                  Approval Probability
+                </p>
+                <p className="text-3xl font-bold text-chart-2">
+                  {result.approval_probability}%
+                </p>
+                <Progress value={result.approval_probability} className="mt-2" />
+              </div>
+
+              <div className="rounded-lg border bg-card p-4">
+                <p className="text-sm text-muted-foreground">Risk Level</p>
+                <p className="text-3xl font-bold">{result.risk_level}</p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="font-semibold">Recommended Documents</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {result.recommended_documents.map((doc) => (
+                  <div
+                    key={doc}
+                    className="flex items-center gap-2 rounded-lg border bg-card p-3 text-sm"
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />
-                    {h}
-                  </span>
+                    <CheckCircle2 className="h-4 w-4 text-chart-2" />
+                    {doc}
+                  </div>
                 ))}
               </div>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-8">
-            <div className="text-center">
-              <p className="text-3xl font-bold text-primary">
-                {top.matchScore}%
-              </p>
-              <p className="text-xs text-muted-foreground">Match score</p>
+
+            <div className="mt-6 flex gap-2">
+              <Button render={<Link href="/checklist" />} variant="outline">
+                View checklist
+              </Button>
+              <Button render={<Link href="/dashboard" />} className="gap-2">
+                Start application
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-chart-2">
-                {top.approvalRate}%
-              </p>
-              <p className="text-xs text-muted-foreground">Approval rate</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!result && (
+        <Card className="mb-8 overflow-hidden border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <span className="text-4xl">{top.flag}</span>
+              <div>
+                <Badge className="mb-2 gap-1.5 bg-primary text-primary-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Demo recommendation
+                </Badge>
+                <h2 className="text-xl font-bold">
+                  {top.country} — {top.visaType}
+                </h2>
+                <p className="text-sm text-muted-foreground">{top.purpose}</p>
+              </div>
             </div>
-            <Button render={<Link href="/checklist" />} className="gap-2">
-              Start
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <h3 className="mb-4 text-lg font-semibold">
         Other strong options ({sorted.length - 1})
       </h3>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {sorted.slice(1).map((v) => (
           <Card key={v.id} className="border-border/70">
@@ -113,6 +179,7 @@ export default function RecommendationsPage() {
                   </div>
                   <Progress value={v.matchScore} />
                 </div>
+
                 <div>
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="flex items-center gap-1.5 text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Download, FileText, ArrowRight, AlertCircle } from "lucide-react"
@@ -13,8 +13,43 @@ import { PageShell } from "@/components/page-shell"
 import { documentChecklist, type ChecklistItem } from "@/lib/data"
 import { cn } from "@/lib/utils"
 
+type EligibilityResult = {
+  destination_country?: string
+  recommended_visa?: string
+  recommended_documents?: string[]
+}
+
+function toChecklistItems(documents: string[]): ChecklistItem[] {
+  return documents.map((doc) => ({
+    id: doc.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+    label: doc,
+    description: "Recommended by your latest eligibility result.",
+    required: true,
+    done: false,
+    category: "Recommended",
+  }))
+}
+
 export default function ChecklistPage() {
   const [items, setItems] = useState<ChecklistItem[]>(documentChecklist)
+  const [result, setResult] = useState<EligibilityResult | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem("eligibilityResult")
+    if (!stored) return
+
+    try {
+      const parsed: EligibilityResult = JSON.parse(stored)
+      const documents = parsed.recommended_documents ?? []
+
+      setResult(parsed)
+      if (documents.length > 0) {
+        setItems(toChecklistItems(documents))
+      }
+    } catch {
+      localStorage.removeItem("eligibilityResult")
+    }
+  }, [])
 
   const toggle = (id: string) =>
     setItems((prev) =>
@@ -40,7 +75,11 @@ export default function ChecklistPage() {
   return (
     <PageShell
       title="Document checklist"
-      description="A personalized checklist for Canada Express Entry (PR). Check items off as you collect them."
+      description={
+        result?.recommended_visa
+          ? `A personalized checklist for ${result.destination_country ?? "your selected destination"} - ${result.recommended_visa}. Check items off as you collect them.`
+          : "A personalized checklist for Canada Express Entry (PR). Check items off as you collect them."
+      }
       action={
         <Button
           variant="outline"
