@@ -1,11 +1,16 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
-  FileStack,
-  Clock3,
+  AlertCircle,
+  CalendarDays,
   CheckCircle2,
   Circle,
-  CalendarDays,
+  Clock3,
+  FileStack,
   Hash,
+  Loader2,
   Plus,
   TrendingUp,
 } from "lucide-react"
@@ -14,41 +19,116 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { PageShell } from "@/components/page-shell"
-import { applications, riskColor } from "@/lib/data"
 import { cn } from "@/lib/utils"
 
-export default function DashboardPage() {
-  const active = applications.length
-  const avgProgress = Math.round(
-    applications.reduce((s, a) => s + a.progress, 0) / applications.length,
-  )
-  const nearDecision = applications.filter((a) => a.progress >= 80).length
+const API_BASE_URL = "http://127.0.0.1:8000"
+const DEMO_APPLICATION_ID = "demo-application"
 
-  const summary = [
-    {
-      label: "Active applications",
-      value: active,
-      icon: FileStack,
-      tint: "text-primary bg-primary/10",
-    },
-    {
-      label: "Average progress",
-      value: `${avgProgress}%`,
-      icon: TrendingUp,
-      tint: "text-chart-2 bg-chart-2/10",
-    },
-    {
-      label: "Near decision",
-      value: nearDecision,
-      icon: Clock3,
-      tint: "text-chart-3 bg-chart-3/10",
-    },
-  ]
+type EligibilityResult = {
+  destination_country?: string
+  recommended_visa?: string
+  risk_level?: string
+}
+
+type TrackingStage = {
+  stage: string
+  description: string
+  completed: boolean
+}
+
+type TrackingResult = {
+  application_id: string
+  current_status: string
+  progress_percentage: number
+  timeline: TrackingStage[]
+}
+
+function riskClass(risk?: string) {
+  switch (risk?.toLowerCase()) {
+    case "low":
+      return "bg-chart-2/15 text-chart-2 border-chart-2/30"
+    case "medium":
+    case "moderate":
+      return "bg-chart-3/15 text-chart-3 border-chart-3/30"
+    case "high":
+      return "bg-destructive/15 text-destructive border-destructive/30"
+    default:
+      return "bg-secondary text-secondary-foreground border-border"
+  }
+}
+
+export default function DashboardPage() {
+  const [eligibility, setEligibility] = useState<EligibilityResult | null>(null)
+  const [tracking, setTracking] = useState<TrackingResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem("eligibilityResult")
+    if (stored) {
+      try {
+        setEligibility(JSON.parse(stored))
+      } catch {
+        localStorage.removeItem("eligibilityResult")
+      }
+    }
+
+    async function loadTracking() {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const response = await fetch(
+          `${API_BASE_URL}/applications/${DEMO_APPLICATION_ID}/tracking`,
+        )
+
+        if (!response.ok) {
+          throw new Error("Tracking request failed")
+        }
+
+        setTracking(await response.json())
+      } catch {
+        setError("Could not load tracking data from the backend.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadTracking()
+  }, [])
+
+  const summary = useMemo(
+    () => [
+      {
+        label: "Active applications",
+        value: tracking ? 1 : 0,
+        icon: FileStack,
+        tint: "text-primary bg-primary/10",
+      },
+      {
+        label: "Application progress",
+        value: `${tracking?.progress_percentage ?? 0}%`,
+        icon: TrendingUp,
+        tint: "text-chart-2 bg-chart-2/10",
+      },
+      {
+        label: "Current status",
+        value: tracking?.current_status ?? "Pending",
+        icon: Clock3,
+        tint: "text-chart-3 bg-chart-3/10",
+      },
+    ],
+    [tracking],
+  )
+
+  const country = eligibility?.destination_country ?? "Selected destination"
+  const visaType = eligibility?.recommended_visa ?? "Recommended visa route"
+  const risk = eligibility?.risk_level ?? "Demo"
 
   return (
     <PageShell
       title="Application dashboard"
-      description="Track the status and progress of every visa application in one place."
+      description="Track the status and progress of your visa application from the FastAPI backend."
       action={
         <Button render={<Link href="/recommendations" />} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -56,7 +136,6 @@ export default function DashboardPage() {
         </Button>
       }
     >
-      {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         {summary.map((s) => (
           <Card key={s.label} className="border-border/70">
@@ -78,67 +157,90 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Applications */}
-      <div className="mt-8 flex flex-col gap-6">
-        {applications.map((app) => (
-          <Card key={app.id} className="border-border/70">
+      <div className="mt-8">
+        {loading && (
+          <Card className="border-border/70">
+            <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading application tracking...
+            </CardContent>
+          </Card>
+        )}
+
+        {error && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="flex items-start gap-3 p-6 text-sm">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="font-medium text-destructive">{error}</p>
+                <p className="mt-1 text-muted-foreground">
+                  Start FastAPI on port 8000, then refresh this page.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {tracking && (
+          <Card className="border-border/70">
             <CardContent className="p-6">
               <div className="flex flex-col gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl">{app.flag}</span>
+                  <span className="text-3xl">✈️</span>
                   <div>
                     <h3 className="font-semibold">
-                      {app.country} — {app.visaType}
+                      {country} - {visaType}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Hash className="h-3.5 w-3.5" />
-                        {app.reference}
+                        {tracking.application_id}
                       </span>
                       <span className="flex items-center gap-1">
                         <CalendarDays className="h-3.5 w-3.5" />
-                        Submitted {app.submitted}
+                        Demo tracking from FastAPI
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={cn(riskColor(app.risk))}>
-                    {app.risk} risk
+                  <Badge variant="outline" className={cn(riskClass(risk))}>
+                    {risk} risk
                   </Badge>
-                  <Badge variant="secondary">{app.status}</Badge>
+                  <Badge variant="secondary">{tracking.current_status}</Badge>
                 </div>
               </div>
 
               <div className="grid gap-6 pt-5 lg:grid-cols-5">
-                {/* Progress */}
                 <div className="lg:col-span-2">
                   <div className="mb-1.5 flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progress</span>
-                    <span className="font-semibold">{app.progress}%</span>
+                    <span className="font-semibold">
+                      {tracking.progress_percentage}%
+                    </span>
                   </div>
-                  <Progress value={app.progress} />
+                  <Progress value={tracking.progress_percentage} />
                   <p className="mt-3 text-sm text-muted-foreground">
-                    Estimated decision:{" "}
+                    Current status:{" "}
                     <span className="font-medium text-foreground">
-                      {app.estimatedDecision}
+                      {tracking.current_status}
                     </span>
                   </p>
                 </div>
 
-                {/* Timeline */}
                 <ol className="lg:col-span-3">
-                  {app.stages.map((stage, i) => {
-                    const last = i === app.stages.length - 1
+                  {tracking.timeline.map((stage, i) => {
+                    const last = i === tracking.timeline.length - 1
+                    const current = stage.stage === tracking.current_status
                     return (
-                      <li key={stage.name} className="flex gap-3">
+                      <li key={stage.stage} className="flex gap-3">
                         <div className="flex flex-col items-center">
-                          {stage.status === "completed" ? (
-                            <CheckCircle2 className="h-5 w-5 text-chart-2" />
-                          ) : stage.status === "current" ? (
+                          {current ? (
                             <span className="flex h-5 w-5 items-center justify-center">
                               <span className="h-3 w-3 animate-pulse rounded-full bg-primary ring-4 ring-primary/20" />
                             </span>
+                          ) : stage.completed ? (
+                            <CheckCircle2 className="h-5 w-5 text-chart-2" />
                           ) : (
                             <Circle className="h-5 w-5 text-border" />
                           )}
@@ -146,9 +248,7 @@ export default function DashboardPage() {
                             <span
                               className={cn(
                                 "my-0.5 w-px flex-1",
-                                stage.status === "completed"
-                                  ? "bg-chart-2/40"
-                                  : "bg-border",
+                                stage.completed ? "bg-chart-2/40" : "bg-border",
                               )}
                             />
                           )}
@@ -157,17 +257,14 @@ export default function DashboardPage() {
                           <p
                             className={cn(
                               "text-sm font-medium",
-                              stage.status === "upcoming" &&
-                                "text-muted-foreground",
+                              !stage.completed && !current && "text-muted-foreground",
                             )}
                           >
-                            {stage.name}
+                            {stage.stage}
                           </p>
-                          {stage.date && (
-                            <p className="text-xs text-muted-foreground">
-                              {stage.date}
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {stage.description}
+                          </p>
                         </div>
                       </li>
                     )
@@ -183,17 +280,13 @@ export default function DashboardPage() {
                 >
                   View documents
                 </Button>
-                <Button
-                  render={<Link href="/chat" />}
-                  variant="ghost"
-                  size="sm"
-                >
+                <Button render={<Link href="/chat" />} variant="ghost" size="sm">
                   Ask the assistant
                 </Button>
               </div>
             </CardContent>
           </Card>
-        ))}
+        )}
       </div>
     </PageShell>
   )
